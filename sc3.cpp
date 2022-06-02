@@ -1,6 +1,5 @@
 #include "sc3/sc3.h"
-#include <cstdlib>
-#include <cstdio>
+#include <iostream>
 
 int main(int argc, char *argv[]) {
     SC_input();
