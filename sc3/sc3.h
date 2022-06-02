@@ -17,7 +17,7 @@ int SC_ans[SC_Nt+1];
 clock_t SC_starttime,SC_endtime;
 
 void SC_input(){
-	int i;
+	int i;	
 	for(i=0; i< SC_N; i++){scanf("%d",&SC_C[i]);};
 	int n;
 	for(n=1; n<= SC_Nt; n++){scanf("%d",&SC_Cr[n]);};
@@ -27,7 +27,7 @@ void SC_input(){
 void SC_output(){
 	SC_endtime=clock();
 	int n;
-
+	
 	for(n=1; n<= SC_Nt; n++){printf("%d\n",SC_ans[n]);};
 	/*        for(n=1; n<= SC_Nt; n++){printf("%d %d\n",SC_ans[n],SC_C[SC_ans[n]]);};*/
 	printf("# elapsed time (sec) = %f \n", (double) (SC_endtime-SC_starttime)/CLOCKS_PER_SEC);

@@ -1,7 +1,6 @@
 #include<stdio.h>
 #include<time.h>
-#include <cmath>
-
+#include <math.h>
 # define SC_L 11
 # define SC_N 121
 # define SC_Nq 10
@@ -37,7 +36,7 @@ void SC_output(){
 
 }
 
-int distance(int c){
+int SC_distance(int c){
   int a,b;
   a=abs(c);
   b=SC_Nq-a;
