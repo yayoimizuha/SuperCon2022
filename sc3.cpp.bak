@@ -1,0 +1,98 @@
+#include "sc3/sc3.h"
+#include <iostream>
+#include <unistd.h>
+
+int move_up(int n);
+
+int move_down(int n);
+
+int move_left(int n);
+
+int move_right(int n);
+
+void print_pos(int pos, int before_pos);
+
+int main(int argc, char *argv[]) {
+    SC_input();
+    printf("%d\n", sizeof(SC_C) / sizeof(int));
+    printf("%d\n", sizeof(SC_Cr) / sizeof(int));
+    for (int i = SC_L - 1; i >= 0; --i) {
+        //printf("%d\n",i);
+        for (int j = 0; j < SC_L; ++j) {
+            printf("%3d: %d\t", i * SC_L + j, SC_C[i * SC_L + j]);
+        }
+        printf("\n");
+    }
+    for (int i = 1; i <= SC_Nt; ++i) {
+        printf("%d:%d\t", i, SC_Cr[i]);
+    }
+    printf("\n");
+    //printf("%d\t%d\n",110, move_up(110));
+    //printf("%d\t%d\n",110, move_left(110));
+    //printf("%d\t%d\n",10, move_down(10));
+    //printf("%d\t%d\n",10, move_right(10));
+    int pos = ((SC_L - 1) / 2) * SC_L + (SC_L - 1) / 2, before_pos;
+    for (int n = 1; n <= SC_Nt; ++n) {
+
+        system("cls");
+        before_pos = pos;
+        if (SC_C[move_up(pos)] == SC_Cr[n]) {
+            pos = move_up(pos);
+            printf("move_up: %d->%d\n", before_pos, pos);
+        } else if (SC_C[move_left(pos)] == SC_Cr[n]) {
+            pos = move_left(pos);
+            printf("move_left: %d->%d\n", before_pos, pos);
+        } else if (SC_C[move_down(pos)] == SC_Cr[n]) {
+            pos = move_down(pos);
+            printf("move_down: %d->%d\n", before_pos, pos);
+        } else if (SC_C[move_right(pos)] == SC_Cr[n]) {
+            pos = move_right(pos);
+            printf("move_right: %d->%d\n", before_pos, pos);
+        }
+        print_pos(pos, before_pos);
+
+        SC_ans[n] = pos;
+
+    }
+    for (int n = 0; n <= SC_Nt; ++n) {
+        printf("%3d: %d\n",n,SC_ans[n]);
+    }
+    return 0;
+}
+
+
+int move_up(int n) {
+    n += 11;
+    if (n >= SC_N)n -= SC_N;
+    return n;
+}
+
+int move_down(int n) {
+    n -= 11;
+    if (n < 0)n += SC_N;
+    return n;
+}
+
+int move_left(int n) {
+    if (!(n % SC_L))return n + SC_L - 1;
+    return n - 1;
+}
+
+int move_right(int n) {
+    if (!(++n % SC_L))return n - SC_L;
+    return n;
+}
+
+void print_pos(int pos, int before_pos) {
+    for (int i = SC_L - 1; i >= 0; --i) {
+        for (int j = 0; j < SC_L; ++j) {
+            if ((i * SC_L + j) == pos)printf("\x1b[7m");
+            if ((i * SC_L + j) == before_pos)printf("\x1b[4m\x1b[1m");
+            printf("\x1b[31m%3d\x1b[39m: \x1b[36m%d\x1b[39m\t", i * SC_L + j, SC_C[i * SC_L + j]);
+            printf("\x1b[0m");
+        }
+        printf("\n");
+    }
+    usleep(100000);
+
+}
