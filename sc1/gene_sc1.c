@@ -128,7 +128,7 @@ int main(int argc, char *argv[]){
   for (n=1; n<= SC_Nt; n++){
     i=path0[n];
     /* without noise*/
-    SC_Cr[n]=SC_C[path0[n]];
+    // SC_Cr[n]=SC_C[path0[n]];
     /*    printf("%d %d \n",n,SC_Cr[n]);*/
     printf("%d \n",SC_Cr[n]);
   };
