@@ -12,6 +12,7 @@ add_executable(SuperCon2022-Pre1 sc1.cpp)
 add_subdirectory(sc3)
 add_subdirectory(sc2)
 add_subdirectory(sc1)
+add_subdirectory(final)
 
 enable_testing()
 add_test(NAME Pre-3 COMMAND bash -c "$<TARGET_FILE:SuperCon2022-ProblemGenerator-Pre3> 12345 | $<TARGET_FILE:SuperCon2022-Pre3>")
