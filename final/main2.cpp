@@ -2,8 +2,10 @@
 #include <mpi.h>  // MPI を使用する場合、このヘッダーを必ず include すること。
 #include <omp.h>
 
+//#include "tests/sc_header.h"  // mpi.h の直後に、このヘッダーを必ず include すること。
 #include "tests/sc_header.h"  // mpi.h の直後に、このヘッダーを必ず include すること。
-
+//
+//こうか
 int myid;
 // MPI_Comm_size の値が代入される。
 int num_procs;
@@ -18,6 +20,7 @@ bool can_dist[sc::N_MAX][PAIR_NUM];
 int dist_num[sc::N_MAX];
 // all_dist[i] = 初期状態を全部使ったときにペアiが区別可能
 bool all_dist[PAIR_NUM];
+std::set<std::pair<int, int>> all_cant_dist;
 // 使ったcan_distを格納するset
 std::set<bool> tmp;
 
@@ -66,22 +69,60 @@ void calc_dist_num(){
   }
 }
 
-void calc_all_can_dist(){
-    for(int i = 0; i < sc::N_MAX; i++){
-        all_dist[i] = false;
-        dist_num[i] = 0;
+int complete_count[1 << 10][500000];
+int c_num[1 << 10];
+
+void calc_all_cant_dist(){
+  std::cout << "calc all_cant_dist" << std::endl;
+  for(int i = 0; i < 100; i++){
+//    std::vector<std::set<int>> complete_count(1 << 10);
+    for(int j = 0; j < (1 << 10); j++){
+      c_num[j] = 0;
     }
-    for(int i = 0; i < sc::N_MAX; i++){
-        int ary_count = 0;
-        for(int j = 0; j < sc::M_MAX; j++){
-            for(int k = j+1; k < sc::M_MAX; k++){
-                can_dist[i][ary_count] = accs[j][i] ^ accs[k][i];
-                all_dist[ary_count] |= can_dist[i][ary_count];
-                dist_num[i] += can_dist[i][ary_count] ? 1 : 0;
-                ary_count++;
-            }
+    for(int j = 0; j < sc::m; j++){
+      int num = 0;
+      for(int k = 0; k < 10; k++){
+        num += (accs[j][10*i+k] << k);
+      }
+      complete_count[num][c_num[num]] = j;
+      c_num[num]++;
+//      complete_count[num].insert(j);
+    }
+
+//    std::set<std::pair<int, int>> next_complete;
+
+    if(i == 0){
+      for(int j = 0; j < (1 << 10); j++){
+  //      std::set<int> complete_graph = complete_count[j];
+        for(int k = 0; k < c_num[j]; k++){
+          for(int l = k+1; l < c_num[j]; l++){
+            all_cant_dist.insert(std::pair<int, int>(complete_count[j][k], complete_count[j][l]));
+          }
         }
+      }
+    }else{
+      std::set<std::pair<int, int>> complete_graph;
+      for(int j = 0; j < (1 << 10); j++){
+        for(int k = 0; k < c_num[j]; k++){
+          for(int l = k+1; l < c_num[j]; l++){
+            complete_graph.insert(std::pair<int, int>(complete_count[j][k], complete_count[j][l]));
+          }
+        }
+      }
+
+      std::set<std::pair<int, int>> sub = all_cant_dist;
+      auto itr = sub.begin();
+      for(int j = 0; j < sub.size(); j++){
+        if(complete_graph.end() == complete_graph.find(*itr)){
+          all_cant_dist.erase(*itr);
+        }
+        itr++;
+      }
+ 
     }
+//    std::cout << "next_complete : " << next_complete.size() << "\t";
+  }
+  std::cout << "all_cant_dist : " << all_cant_dist.size() << std::endl;
 }
 
 void calc_dist() {
@@ -100,6 +141,10 @@ void calc_dist() {
             }
         }
     }
+}
+
+void greedy2() {
+  
 }
 
 // 状態 qs[0] から 状態 qs[k-1] のk個の状態を使った時に区別できる文字列のペアの個数を返す関数。
@@ -331,12 +376,18 @@ void run() {
     for (int i = 0; i < sc::n; i++) sc::T[c][i]--;
   simulate();
   std::cout << "Fizz!" << std::endl;
-  calc_dist();
+//  calc_dist();
   calc_dist_num();
+  calc_all_cant_dist();
+//  return;
   std::cout << "Buzz!" << std::endl;
+  std::cout << "max_sep_c : " << get_max_sep_c() << std::endl;
+  std::cout << "max_sep_c : " << get_max_sep_c() << std::endl;
+  std::cout << "max_sep_c : " << get_max_sep_c() << std::endl;
+  std::cout << "max_sep_c : " << get_max_sep_c() << std::endl;
   std::cerr << myid << " simulated " << sc::get_elapsed_time() << std::endl;
   std::cout << "FizzBuzz!" << std::endl;
-  greedy_search();
+//  greedy_search();
 }
 
 int main(int argc, char** argv) {
@@ -346,5 +397,8 @@ int main(int argc, char** argv) {
   run();
   sc::finalize();  // おわりに sc::finalize() を必ず呼び出すこと。
 }
+
+//oo
+
 
 
