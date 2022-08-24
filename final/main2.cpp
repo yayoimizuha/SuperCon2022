@@ -50,7 +50,7 @@ int accs[sc::M_MAX][sc::N_MAX + 4 * 48];
 // オートマトンの遷移関数をシミュレーションする関数
 void simulate() {
     for (int j = 0; j < sc::m; j++) {
-        const int BS = (sc::N_MAX + (num_procs - 1)) / num_procs;
+            const int BS = (sc::N_MAX + (num_procs - 1)) / num_procs;
         int accs_pre[BS];
         for (int i = myid * BS; i < (myid + 1) * BS && i < sc::n; i++) {
             int q = i;
