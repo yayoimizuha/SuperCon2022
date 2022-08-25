@@ -23,3 +23,9 @@ include_directories(sample/team_XXX_MPI SuperCon2022-Final_2)
 add_executable(SuperCon2022-Final_2 main2.cpp)
 target_link_libraries(SuperCon2022-Final_2 ${MPI_LIBRARIES})
 target_include_directories(SuperCon2022-Final_2 PUBLIC ${MPI_INCLUDE_PATH})
+
+
+include_directories(sample/team_XXX_MPI SuperCon2022-Final_3)
+add_executable(SuperCon2022-Final_3 main3.cpp)
+target_link_libraries(SuperCon2022-Final_3 ${MPI_LIBRARIES})
+target_include_directories(SuperCon2022-Final_3 PUBLIC ${MPI_INCLUDE_PATH})

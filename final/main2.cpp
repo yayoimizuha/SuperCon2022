@@ -1,14 +1,16 @@
-#include <bits/stdc++.h>
-#include <mpi.h>  // MPI を使用する場合、このヘッダーを必ず include すること。
+#include<bits/stdc++.h>
+//#include <mpi.h>  // MPI を使用する場合、このヘッダーを必ず include すること。
 #include <omp.h>
 
 //#include "tests/sc_header.h"  // mpi.h の直後に、このヘッダーを必ず include すること。
 #include "tests/sc_header.h"  // mpi.h の直後に、このヘッダーを必ず include すること。
+
 //
 //こうか
 int myid;
 // MPI_Comm_size の値が代入される。
 int num_procs;
+int nthreads = omp_get_max_threads();
 
 /*---------定義---------*/
 
@@ -26,20 +28,30 @@ std::set<bool> tmp;
 // affinities[i][j] = 状態iと状態jの相性(小さいほどよい)
 long affinities[sc::N_MAX][sc::N_MAX];
 
+/*--------正規乱数-----*/
+
+int search_width;
+std::random_device seed_gen;
+std::default_random_engine engine(seed_gen());
+std::normal_distribution<> distribution(0, 4.0);
 /*-------ここまで-------*/
 
 // 疑似乱数の生成に使用する（これ以外の疑似乱数を用いてもよい）。
 struct xor_shift {
     unsigned long long x;
+
     xor_shift(unsigned long long SEED) { x = SEED; }
+
     unsigned long long next() {
         x = x ^ (x << 13);
         x = x ^ (x >> 7);
         x = x ^ (x << 17);
         return x;
     }
+
     // [0, x)
     unsigned long long rnd(unsigned long long x) { return next() % x; }
+
     // [l, r]
     unsigned long long range_rnd(unsigned long long l, unsigned long long r) { return l + rnd(r - l + 1); }
 };
@@ -47,47 +59,53 @@ struct xor_shift {
 // accs[j][i] = 状態 i からはじめて文字列 w_j の遷移関数で遷移した先の状態が受理状態の場合 1、受理状態でない場合 0
 // が代入される。
 int accs[sc::M_MAX][sc::N_MAX + 4 * 48];
+
 // オートマトンの遷移関数をシミュレーションする関数
 void simulate() {
     for (int j = 0; j < sc::m; j++) {
-            const int BS = (sc::N_MAX + (num_procs - 1)) / num_procs;
+        const int BS = (sc::N_MAX + (num_procs - 1)) / num_procs;
         int accs_pre[BS];
         for (int i = myid * BS; i < (myid + 1) * BS && i < sc::n; i++) {
             int q = i;
             for (int k = 0; sc::w[j][k] != '\0'; k++) { q = sc::T[sc::w[j][k] - 'a'][q]; }
             accs_pre[i - myid * BS] = sc::F[q];
+
         }
-        MPI_Allgather(accs_pre, BS, MPI_INT, accs[j], BS, MPI_INT, MPI_COMM_WORLD);
+
+        for (int i = 0; i < BS; i++) accs[j][i] = accs_pre[i];
+
+        //memcpy(accs[j],accs_pre,BS);
+        //MPI_Allgather(accs_pre, BS, MPI_INT, accs[j], BS, MPI_INT, MPI_COMM_WORLD);
     }
 }
 
-void calc_affinities(){
+void calc_affinities() {
     int count[4];
-    for(int i = 0; i < sc::n; i++){
-        for(int j = i+1; j < sc::n; j++){
+    for (int i = 0; i < sc::n; i++) {
+        for (int j = i + 1; j < sc::n; j++) {
             affinities[i][j] = 0;
-            for(int k = 0; k < 4; k++){
+            for (int k = 0; k < 4; k++) {
                 count[k] = 0;
             }
-            for(int k = 0; k < sc::m; k++){
+            for (int k = 0; k < sc::m; k++) {
                 int num = accs[k][i] * 2 + accs[k][j];
                 count[num]++;
             }
-            for(int k = 0; k < 4; k++){
+            for (int k = 0; k < 4; k++) {
                 affinities[i][j] += count[k] * count[k];
             }
             affinities[j][i] = affinities[i][j];
         }
     }
-    for(int i = 0; i < sc::n; i++){
+    for (int i = 0; i < sc::n; i++) {
         affinities[i][i] = sc::m * sc::m;
     }
 }
 
-void calc_dist_num(){
-    for(int i = 0; i < sc::N_MAX; i++){
+void calc_dist_num() {
+    for (int i = 0; i < sc::N_MAX; i++) {
         int count = 0;
-        for(int j = 0; j < sc::M_MAX; j++){
+        for (int j = 0; j < sc::M_MAX; j++) {
             count += accs[j][i];
         }
         dist_num[i] = count * (sc::M_MAX - count);
@@ -155,14 +173,14 @@ void calc_all_cant_dist(){
 //std::set<int, int> get_cant_dist_set(int k, int qs )
 
 void calc_dist() {
-    for(int i = 0; i < sc::N_MAX; i++){
+    for (int i = 0; i < sc::N_MAX; i++) {
         all_dist[i] = false;
         dist_num[i] = 0;
     }
-    for(int i = 0; i < sc::N_MAX; i++){
+    for (int i = 0; i < sc::N_MAX; i++) {
         int ary_count = 0;
-        for(int j = 0; j < sc::M_MAX; j++){
-            for(int k = j+1; k < sc::M_MAX; k++){
+        for (int j = 0; j < sc::M_MAX; j++) {
+            for (int k = j + 1; k < sc::M_MAX; k++) {
                 can_dist[i][ary_count] = accs[j][i] ^ accs[k][i];
                 all_dist[ary_count] |= can_dist[i][ary_count];
                 dist_num[i] += can_dist[i][ary_count] ? 1 : 0;
@@ -173,7 +191,7 @@ void calc_dist() {
 }
 
 // 状態 qs[0] から 状態 qs[k-1] のk個の状態を使った時に区別できる文字列のペアの個数を返す関数。
-int get_sep_c(int k, int* qs) {
+int get_sep_c(int k, int *qs) {
     int c = 0;
     for (int j1 = 0; j1 < sc::m; j1++) {
         for (int j2 = j1; j2 < sc::m; j2++) {
@@ -191,7 +209,7 @@ int get_sep_c(int k, int* qs) {
 }
 
 // 状態 qs[0] から 状態 qs[k-1] のk個の状態を使った時に区別できない文字列のペアのsetを返す
-std::set<std::pair<int, int>> get_cant_dist_set(int k, int* qs) {
+std::set<std::pair<int, int>> get_cant_dist_set(int k, int *qs) {
     std::set<std::pair<int, int>> ans;
     for (int j1 = 0; j1 < sc::m; j1++) {
         for (int j2 = j1 + 1; j2 < sc::m; j2++) {
@@ -202,7 +220,7 @@ std::set<std::pair<int, int>> get_cant_dist_set(int k, int* qs) {
                     break;
                 }
             }
-            if(!ok){
+            if (!ok && all_cant_dist.end() == all_cant_dist.find(std::pair<int, int>(j1, j2))) {
                 ans.insert(std::pair<int, int>(j1, j2));
             }
         }
@@ -221,11 +239,12 @@ int get_max_sep_c() {
 // スコアを計算する関数（ただし、出力が正しいかどうかのチェックはここではしない）。
 // int k: 使用する状態の個数を表す。
 // int *qs: 使用する状態の情報を持った長さ k の配列。
-long get_score(int k, int* qs) {
+long get_score(int k, int *qs) {
     long score = k * sc::n * sc::n;
     for (int i = 0; i < k; i++) score += qs[i];
     return score;
 }
+
 long get_worst_score() { return 2ll * sc::n * sc::n * sc::n; }
 
 // 使用する状態集合を探索する関数。
@@ -267,35 +286,36 @@ void search() {
     }
 
     // 最も小さいコストの解を持つプロセスを求める。
-    struct score_id {
-        long score;
-        int id;
-    } cur, mv;
-    cur = {res_score, myid};
-    MPI_Allreduce(&cur, &mv, 1, MPI_LONG_INT, MPI_MINLOC, MPI_COMM_WORLD);
-    if (mv.id != 0) {
-        if (myid == mv.id) {
-            std::cerr << "send"
-                      << " " << myid << std::endl;
-            MPI_Send(&res_k, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-            MPI_Send(&res_qs, res_k, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        } else if (myid == 0) {
-            MPI_Status status;
-            std::cerr << "recv"
-                      << " " << myid << "\n";
-            MPI_Recv(&res_k, 1, MPI_INT, mv.id, 0, MPI_COMM_WORLD, &status);
-            MPI_Recv(&res_qs, res_k, MPI_INT, mv.id, 0, MPI_COMM_WORLD, &status);
-        }
-    }
+    //struct score_id {
+    //    long score;
+    //    int id;
+    //} cur, mv;
+    //cur = {res_score, myid};
+    //printf("MPI_Allreduce\n");
+    //MPI_Allreduce(&cur, &mv, 1, MPI_LONG_INT, MPI_MINLOC, MPI_COMM_WORLD);
+    //if (mv.id != 0) {
+    //    if (myid == mv.id) {
+    //        std::cerr << "send"
+    //                  << " " << myid << std::endl;
+    //        MPI_Send(&res_k, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    //        MPI_Send(&res_qs, res_k, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    //    } else if (myid == 0) {
+    //        MPI_Status status;
+    //        std::cerr << "recv"
+    //                  << " " << myid << "\n";
+    //        MPI_Recv(&res_k, 1, MPI_INT, mv.id, 0, MPI_COMM_WORLD, &status);
+    //        MPI_Recv(&res_qs, res_k, MPI_INT, mv.id, 0, MPI_COMM_WORLD, &status);
+    //    }
+    //}
 
     sc::output(res_k, res_qs);
 }
 
 //状態kを追加するといくつ被覆が増えるか
-int get_benefit(int k, std::set<std::pair<int, int>> not_done_pair){
+int get_benefit(int k, std::set<std::pair<int, int>> not_done_pair) {
     int result = 0;
     auto itr = not_done_pair.begin();
-    for(int i = 0; i < not_done_pair.size(); i++){
+    for (int i = 0; i < not_done_pair.size(); i++) {
         int j1 = (*itr).first;
         int j2 = (*itr).second;
         result += accs[j1][k] ^ accs[j2][k];
@@ -304,12 +324,12 @@ int get_benefit(int k, std::set<std::pair<int, int>> not_done_pair){
     return result;
 }
 
-void remove_k(int k, std::set<std::pair<int, int>> not_done_pair){
+void remove_k(int k, std::set<std::pair<int, int>> not_done_pair) {
 
 }
 
 //ソート用比較関数
-bool asc_desc(std::pair<int, int>& left, std::pair<int, int>& right) {
+bool asc_desc(std::pair<int, int> &left, std::pair<int, int> &right) {
     return right.second < left.second;
 }
 
@@ -330,60 +350,67 @@ void greedy_search() {
 
     //選んだ状態
     bool is_done[sc::N_MAX];
-    for(int i = 0; i < sc::N_MAX; i++){
+    for (int i = 0; i < sc::N_MAX; i++) {
         is_done[i] = false;
     }
 
 
     //ある状態がいくつ区別できるか
     std::vector<std::pair<int, int>> states = std::vector<std::pair<int, int>>();
-    for(int i = 0; i < sc::n; i++){
+    for (int i = 0; i < sc::n; i++) {
         states.push_back(std::pair<int, int>(i, dist_num[i]));
     }
     std::sort(states.begin(), states.end(), asc_desc);
 
-
-    //最初の30個
-    int k = 0;
-    int qs[sc::N_MAX];
-    qs[k] = states[0].first + 1;
-    is_done[qs[k] - 1] = true;
-    k++;
-    for(int i = 0; i < 29; i++){
-        int min_index = 0;
-        long min_affinity = 2000000000l;
-        for(int j = 0; j < sc::n; j++){
-            if(is_done[j]){
-                continue;
-            }
-            long affinity = 0;
-            for(int l = 0; l < k; l++){
-                affinity += affinities[j][qs[l]-1];
-            }
-//      std::cout << min_affinity << " " << affinity << " " << j << std::endl;
-            if(affinity < min_affinity || min_affinity == 2000000000l){
-                min_affinity = affinity;
-                min_index = j;
-            }
-        }
-        qs[k] = min_index + 1;
-        std::cout << qs[k] << std::endl;
-        is_done[qs[k] - 1] = true;
-        k++;
-    }
 /*
   //最初の30個
   int k = 0;
   int qs[sc::N_MAX];
-  for(int i = 0; i < 30; i++){
-    qs[k] = states[i].first + 1;
-    is_done[qs[k]] = true;
+  qs[k] = states[0].first + 1;
+  is_done[qs[k] - 1] = true;
+  k++;
+  for(int i = 0; i < 29; i++){
+    int min_index = 0;
+    long min_affinity = 2000000000l;
+    for(int j = 0; j < sc::n; j++){
+      if(is_done[j]){
+        continue;
+      }
+      long affinity = 0;
+      for(int l = 0; l < k; l++){
+        affinity += affinities[j][qs[l]-1];
+      }
+//      std::cout << min_affinity << " " << affinity << " " << j << std::endl;
+      if(affinity < min_affinity || min_affinity == 2000000000l){
+        min_affinity = affinity;
+        min_index = j;
+      }
+    }
+    qs[k] = min_index + 1;
+    std::cout << qs[k] << std::endl;
+    is_done[qs[k] - 1] = true;
     k++;
   }
 */
+
+    //最初の30個
+    int k = 0;
+    int qs[sc::N_MAX];
+    for (int i = 0; i < 50; i++) {
+        qs[k] = states[i].first + 1;
+        is_done[qs[k]] = true;
+        k++;
+    }
+
+    int old_k = sc::n;
+    int old_qs[sc::N_MAX];
+    for (int i = 0; i < k; i++) {
+        old_qs[i] = qs[i];
+    }
+
     std::set<std::pair<int, int>> not_done_pair = get_cant_dist_set(k, qs);
     auto itr = all_cant_dist.begin();
-    for(int i = 0; i < all_cant_dist.size(); i++){
+    for (int i = 0; i < all_cant_dist.size(); i++) {
         not_done_pair.erase(*itr);
         itr++;
     }
@@ -393,36 +420,69 @@ void greedy_search() {
 
     std::cerr << myid << " " << score << " " << sc::get_elapsed_time() << std::endl;
 
-    while(sc::get_elapsed_time() - 6000.0 < sc::TIME_LIMIT){
-        while(true){
-            if(not_done_pair.size() == 0){
+
+    while (sc::get_elapsed_time() - 6000.0 < sc::TIME_LIMIT) {
+        while (true) {
+            if (not_done_pair.size() == 0) {
                 break;
             }
             int max_index = 0;
             int max_benefit = -1;
-            for(int i = 0; i < sc::n; i++){
-                if(is_done[i]){
-                    continue;
+            int max_benefits[nthreads];
+            int max_indexs[nthreads];
+//      std::cout << std::endl << "@@@" << std::endl;
+#pragma omp parallel
+            {
+                int ithread = omp_get_thread_num();
+                max_benefits[ithread] = -1;
+		int benefit;
+
+#pragma omp for private(benefit)
+		for (int i = 0; i < sc::N_MAX; i++) {
+                    if (is_done[i]) {
+                        continue;
+                    }
+                    benefit = get_benefit(i, not_done_pair);
+                    if (benefit > max_benefits[ithread] && benefit > 0) {
+                        max_benefits[ithread] = benefit;
+                        max_indexs[ithread] = i;
+                    }
+//          if(ithread == 17){
+//            std::cout << "[" << ithread << "]" << std::endl;
+//          }
                 }
-                int benefit = get_benefit(i, not_done_pair);
-                if(benefit > max_benefit && benefit > 0){
-                    max_benefit = benefit;
-                    max_index = i;
+//        #pragma omp critical
+                {
+//          std::cout << "[" << omp_get_thread_num() << "]"  << temp_max_benefit << std::endl;
+//          if(max_benefit < temp_max_benefit){
+                    //           max_benefit = temp_max_benefit;
+//            max_index = temp_max_index;
+//          }
+                }
+//        #pragma omp critical
+//        std::cout << "[" << omp_get_thread_num() << "]" << std::endl;
+            }
+
+            for (int i = 0; i < nthreads; i++) {
+                if (max_benefit < max_benefits[i]) {
+                    max_benefit = max_benefits[i];
+                    max_index = max_indexs[i];
                 }
             }
 
-            std::cout << "@" << not_done_pair.size() << std::endl;
+            //    std::cout << not_done_pair.size() << ",";
+            //    std::cout << std::endl << "###" << std::endl;
 
-            if(max_benefit == -1){
+            if (max_benefit == -1) {
                 break;
             }
 
             auto sub = not_done_pair;
             auto itr = sub.begin();
-            for(int i = 0; i < sub.size(); i++){
+            for (int i = 0; i < sub.size(); i++) {
                 int j1 = (*itr).first;
                 int j2 = (*itr).second;
-                if(accs[j1][max_index] != accs[j2][max_index]){
+                if (accs[j1][max_index] != accs[j2][max_index]) {
                     not_done_pair.erase(*itr);
                 }
                 itr++;
@@ -432,49 +492,65 @@ void greedy_search() {
 
             qs[k] = max_index + 1;
             k++;
+            if (k > old_k + 1) {
+                break;
+            }
         }
 
         score = get_score(k, qs);
 
-
+        //std::cout << std::endl;
         if (score < res_score) {
             res_k = k;
             for (int i = 0; i < res_k; i++) res_qs[i] = qs[i];
             res_score = score;
-            std::cout << "*Best* " << res_score << std::endl;
+            std::cout << std::endl  << "*Best* " << res_score << std::endl;
+	    system("date");
             sc::output(res_k, res_qs);
+            old_k = k;
+            for (int i = 0; i < k; i++) {
+                old_qs[i] = qs[i];
+            }
+        } else {
+            k = old_k;
+            for (int i = 0; i < k; i++) {
+                qs[i] = old_qs[i];
+            }
         }
 
         for (int i = 0; i < k - 1; i++) {
             const int j = rand_gen.range_rnd(i, k - 1);
             std::swap(qs[i], qs[j]);
         }
-        k -= 10;
+        double tmp_with_result = distribution(engine);
+        search_width = 1 + (int) (std::abs(tmp_with_result) * 1.7);
+        //printf("search_with: %d\n", search_width);
+        k -= search_width;
         not_done_pair = get_cant_dist_set(k, qs);
     }
 
 
     // 最も小さいコストの解を持つプロセスを求める。
-    struct score_id {
-        long score;
-        int id;
-    } cur, mv;
-    cur = {res_score, myid};
-    MPI_Allreduce(&cur, &mv, 1, MPI_LONG_INT, MPI_MINLOC, MPI_COMM_WORLD);
-    if (mv.id != 0) {
-        if (myid == mv.id) {
-            std::cerr << "send"
-                      << " " << myid << std::endl;
-            MPI_Send(&res_k, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-            MPI_Send(&res_qs, res_k, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        } else if (myid == 0) {
-            MPI_Status status;
-            std::cerr << "recv"
-                      << " " << myid << "\n";
-            MPI_Recv(&res_k, 1, MPI_INT, mv.id, 0, MPI_COMM_WORLD, &status);
-            MPI_Recv(&res_qs, res_k, MPI_INT, mv.id, 0, MPI_COMM_WORLD, &status);
-        }
-    }
+    //struct score_id {
+    //    long score;
+    //    int id;
+    //} cur, mv;
+    //cur = {res_score, myid};
+    //MPI_Allreduce(&cur, &mv, 1, MPI_LONG_INT, MPI_MINLOC, MPI_COMM_WORLD);
+    //if (mv.id != 0) {
+    //    if (myid == mv.id) {
+    //        std::cerr << "send"
+    //                  << " " << myid << std::endl;
+    //        MPI_Send(&res_k, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    //        MPI_Send(&res_qs, res_k, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    //    } else if (myid == 0) {
+    //        MPI_Status status;
+    //        std::cerr << "recv"
+    //                  << " " << myid << "\n";
+    //        MPI_Recv(&res_k, 1, MPI_INT, mv.id, 0, MPI_COMM_WORLD, &status);
+    //        MPI_Recv(&res_qs, res_k, MPI_INT, mv.id, 0, MPI_COMM_WORLD, &status);
+    //    }
+    //}
 
     sc::output(res_k, res_qs);
 }
@@ -482,8 +558,10 @@ void greedy_search() {
 // main関数で入力を読み込んだ後、以下の関数が実行される。
 void run() {
     std::cout << "Bar!" << std::endl;
-    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    //MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+    num_procs = 1;
+    //MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    myid = 0;
     for (int c = 0; c < sc::A_SIZE; c++)
         for (int i = 0; i < sc::n; i++) sc::T[c][i]--;
     simulate();
@@ -493,14 +571,14 @@ void run() {
 //  calc_all_cant_dist();
 //  return;
     std::cout << "Buzz!" << std::endl;
-    calc_affinities();
+//  calc_affinities();
     std::cout << "max_sep_c : " << get_max_sep_c() << std::endl;
     std::cerr << myid << " simulated " << sc::get_elapsed_time() << std::endl;
     std::cout << "FizzBuzz!" << std::endl;
     greedy_search();
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     std::cout << "Hello!" << std::endl;
     sc::initialize(argc, argv);  // はじめに sc::initialize(argc, argv) を必ず呼び出すこと。
     std::cout << "Foo!" << std::endl;
